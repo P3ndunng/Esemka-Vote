@@ -31,10 +31,10 @@ class CandidateAdapter(
         val candidate = candidates[position]
 
         holder.tvName.text = candidate.name
-        holder.tvDept.text = candidate.departemen
+        holder.tvDept.text = candidate.division
 
         Glide.with(holder.itemView.context)
-            .load("https://api.esemkavote.com/images/" + candidate.image_path)
+            .load("http://10.0.2.2:5000/images/" + candidate.photo)
             .placeholder(R.drawable.ic_launcher_background)
             .into(holder.ivFoto)
 

@@ -9,18 +9,27 @@ import retrofit2.Call
 import retrofit2.http.Body
 import retrofit2.http.Header
 import retrofit2.http.Path
+import retrofit2.http.Query
 import retrofit2.http.GET
 import retrofit2.http.POST
 
 interface ApiService {
-    @POST("auth/login")
-    fun login(@Body request: AuthDTO): Call<LoginResponse>
 
-    @GET("events")
-    fun getEventDetail(): Call<List<VotingEvent>>
+    @POST("auth")
+    fun login(
+        @Body request: AuthDTO
+    ): Call<LoginResponse>
 
-    @GET("events/{id}/candidates")
-    fun getCandidate(@Path("id") eventId: Int): Call<List<Candidate>>
+    @GET("voting-events")
+    fun getEventDetail(
+        @Query("empID") empId: Int
+    ): Call<List<VotingEvent>>
+
+    @GET("voting-candidates/{votingEventID}")
+    fun getCandidate(
+        @Header("Authorization") token: String,
+        @Path("votingEventID") eventId: Int
+    ): Call<List<Candidate>>
 
     @POST("vote")
     fun castVote(
