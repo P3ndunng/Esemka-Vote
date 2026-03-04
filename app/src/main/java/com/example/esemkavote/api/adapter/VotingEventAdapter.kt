@@ -31,10 +31,16 @@ class VotingEventAdapter(
 
         holder.tvTitle.text   = event.title
         holder.tvDesc.text    = event.description
-        holder.tvDate.text    = "${event.start_date} - ${event.end_date}"
-        holder.tvVoters.text  = "${event.total_voters} voters"
+        holder.tvDate.text    = "${event.startDate} - ${event.endDate}"
+        holder.tvVoters.text  = "${event.totalVoters} voters"
 
         holder.itemView.setOnClickListener { onClick(event) }
+
+        holder.itemView.setOnClickListener {
+            android.util.Log.d("DEBUG_VOTE", "Click event id=${event.votingEventId} title=${event.title}")
+            onClick(event)
+        }
+
     }
 
     override fun getItemCount(): Int = events.size

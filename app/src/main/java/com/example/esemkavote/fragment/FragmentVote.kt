@@ -18,6 +18,7 @@ import com.example.esemkavote.api.ApiClient
 import com.example.esemkavote.api.adapter.CandidateAdapter
 import com.example.esemkavote.api.model.Candidate
 import com.example.esemkavote.api.model.VoteDTO
+import org.json.JSONObject
 import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
@@ -28,114 +29,172 @@ class FragmentVote : Fragment() {
     private lateinit var layoutAction: LinearLayout
     private lateinit var tvSelectedCandidate: TextView
     private lateinit var btnVote: Button
+
     private var selectedCandidateId: Int? = null
     private var hasVoted = false
+    private var eventId: Int = 0
 
     override fun onCreateView(
-        inflater: LayoutInflater, container: ViewGroup?,
+        inflater: LayoutInflater,
+        container: ViewGroup?,
         savedInstanceState: Bundle?
-    ): View? {
-        return inflater.inflate(R.layout.fragment_voting, container, false)
-    }
+    ): View = inflater.inflate(R.layout.fragment_voting, container, false)
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        rvCandidates        = view.findViewById(R.id.rv_candidates)
-        layoutAction        = view.findViewById(R.id.layout_action_vote)
+        rvCandidates = view.findViewById(R.id.rv_candidates)
+        layoutAction = view.findViewById(R.id.layout_action_vote)
         tvSelectedCandidate = view.findViewById(R.id.tv_currently_voting)
-        btnVote             = view.findViewById(R.id.btn_vote)
+        btnVote = view.findViewById(R.id.btn_vote)
 
         rvCandidates.layoutManager = GridLayoutManager(context, 2)
+        layoutAction.visibility = View.GONE
 
-        val eventId = arguments?.getInt(HomeActivity.EVENT_ID)
-        if (eventId != null && eventId != 0) {
-            getCandidates(eventId)
-        } else {
+        eventId = arguments?.getInt(HomeActivity.EVENT_ID) ?: 0
+        android.util.Log.d("DEBUG_VOTE", "FragmentVote args=$arguments eventId=$eventId")
+
+        if (eventId == 0) {
             Toast.makeText(context, "Event ID tidak valid", Toast.LENGTH_SHORT).show()
+            btnVote.isEnabled = false
+            return
         }
+
+        getCandidates(eventId)
 
         btnVote.setOnClickListener {
             if (hasVoted) return@setOnClickListener
+
             val candidateId = selectedCandidateId ?: run {
                 Toast.makeText(context, "Pilih kandidat terlebih dahulu", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
-            val token = getToken()
-            if (token.isEmpty()) {
-                Toast.makeText(context, "Sesi habis, silakan login ulang", Toast.LENGTH_SHORT).show()
-                return@setOnClickListener
-            }
-            castVote(token, candidateId)
+
+            castVote(candidateId)
         }
     }
 
-    private fun getToken(): String {
-        val sharedPref = requireActivity()
+    private fun getAuthHeaderOrNull(): String? {
+        val token = requireContext()
             .getSharedPreferences("EsemkaPrefs", Context.MODE_PRIVATE)
-        return sharedPref.getString("TOKEN", "") ?: ""
+            .getString("TOKEN", null)
+
+        return token?.takeIf { it.isNotBlank() }?.let { "Bearer $it" }
+    }
+
+    private fun parseBackendMessage(raw: String?): String? {
+        if (raw.isNullOrBlank()) return null
+        return try {
+            val obj = JSONObject(raw)
+            // { "success": false, "message": "..." }
+            obj.optString("message").takeIf { it.isNotBlank() }
+        } catch (_: Exception) {
+            // kadang backend kirim plain text
+            raw.takeIf { it.isNotBlank() }
+        }
+    }
+
+    private fun setAlreadyVotedState(message: String = "Anda sudah melakukan voting") {
+        hasVoted = true
+        layoutAction.visibility = View.GONE
+        btnVote.isEnabled = false
+        Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
     }
 
     private fun getCandidates(eventId: Int) {
-        val token = getToken()
+        val auth = getAuthHeaderOrNull() ?: run {
+            Toast.makeText(context, "Token kosong, silakan login ulang", Toast.LENGTH_SHORT).show()
+            return
+        }
 
-        // ← Token sekarang dikirim ke getCandidate()
-        ApiClient.instance.getCandidate(token, eventId).enqueue(object : Callback<List<Candidate>> {
-
+        ApiClient.instance.getCandidate(auth, eventId).enqueue(object : Callback<List<Candidate>> {
             override fun onResponse(call: Call<List<Candidate>>, response: Response<List<Candidate>>) {
-                android.util.Log.d("DEBUG_VOTE", "Candidates code: ${response.code()}")
+                android.util.Log.d("DEBUG_VOTE", "Candidates code=${response.code()}")
 
                 if (response.isSuccessful) {
-                    val list = response.body() ?: emptyList()
-                    android.util.Log.d("DEBUG_VOTE", "Candidates count: ${list.size}")
-
+                    val list = response.body().orEmpty()
                     if (list.isEmpty()) {
                         Toast.makeText(context, "Tidak ada kandidat tersedia", Toast.LENGTH_SHORT).show()
                         return
                     }
 
                     rvCandidates.adapter = CandidateAdapter(list) { candidate ->
+                        if (hasVoted) return@CandidateAdapter
+
                         layoutAction.visibility = View.VISIBLE
                         tvSelectedCandidate.text = "Memilih: ${candidate.name}"
                         selectedCandidateId = candidate.voting_candidate_id
                     }
                 } else {
                     val err = response.errorBody()?.string()
-                    android.util.Log.e("DEBUG_VOTE", "Candidates error: $err")
-                    Toast.makeText(context, "Gagal memuat kandidat: ${response.code()}", Toast.LENGTH_SHORT).show()
+                    val msg = parseBackendMessage(err)
+                    android.util.Log.e("DEBUG_VOTE", "Candidates error code=${response.code()} body=$err")
+
+                    Toast.makeText(
+                        context,
+                        msg ?: "Gagal memuat kandidat: ${response.code()}",
+                        Toast.LENGTH_SHORT
+                    ).show()
                 }
             }
 
             override fun onFailure(call: Call<List<Candidate>>, t: Throwable) {
-                android.util.Log.e("DEBUG_VOTE", "Candidates failure: ${t.message}")
+                android.util.Log.e("DEBUG_VOTE", "Candidates failure: ${t.message}", t)
                 Toast.makeText(context, "Koneksi gagal: ${t.message}", Toast.LENGTH_SHORT).show()
             }
         })
     }
 
-    private fun castVote(token: String, candidateId: Int) {
+    private fun castVote(candidateId: Int) {
+        val auth = getAuthHeaderOrNull() ?: run {
+            Toast.makeText(context, "Token kosong, silakan login ulang", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        android.util.Log.d("DEBUG_VOTE", "TRY VOTE eventId=$eventId candidateId=$candidateId")
+
         btnVote.isEnabled = false
 
-        ApiClient.instance.castVote(token, VoteDTO(candidateId)).enqueue(object : Callback<Void> {
+        ApiClient.instance
+            .castVote(auth, eventId, VoteDTO(votingCandidateId = candidateId))
+            .enqueue(object : Callback<Void> {
 
-            override fun onResponse(call: Call<Void>, response: Response<Void>) {
-                if (response.isSuccessful) {
-                    hasVoted = true
-                    Toast.makeText(context, "Vote berhasil dikirim!", Toast.LENGTH_SHORT).show()
-                    layoutAction.visibility = View.GONE
-                } else {
+                override fun onResponse(call: Call<Void>, response: Response<Void>) {
+                    if (response.isSuccessful) {
+                        hasVoted = true
+                        layoutAction.visibility = View.GONE
+                        Toast.makeText(context, "Vote berhasil dikirim!", Toast.LENGTH_SHORT).show()
+                        btnVote.isEnabled = false
+                        return
+                    }
+
                     val err = response.errorBody()?.string()
-                    android.util.Log.e("DEBUG_VOTE", "Vote error: $err")
-                    Toast.makeText(context, "Gagal vote: ${response.code()}", Toast.LENGTH_SHORT).show()
+                    val msg = parseBackendMessage(err)
+                    android.util.Log.e("DEBUG_VOTE", "Vote error code=${response.code()} body=$err")
+
+                    // khusus kasus sudah voting
+                    if (response.code() == 400 && (msg?.contains("sudah", ignoreCase = true) == true ||
+                                err?.contains("sudah", ignoreCase = true) == true)
+                    ) {
+                        setAlreadyVotedState(msg ?: "Anda sudah melakukan voting")
+                        return
+                    }
+
+                    Toast.makeText(
+                        context,
+                        msg ?: "Gagal vote: ${response.code()}",
+                        Toast.LENGTH_SHORT
+                    ).show()
+
+                    // enable lagi kalau gagal selain "sudah voting"
                     btnVote.isEnabled = true
                 }
-            }
 
-            override fun onFailure(call: Call<Void>, t: Throwable) {
-                android.util.Log.e("DEBUG_VOTE", "Vote failure: ${t.message}")
-                Toast.makeText(context, "Koneksi gagal: ${t.message}", Toast.LENGTH_SHORT).show()
-                btnVote.isEnabled = true
-            }
-        })
+                override fun onFailure(call: Call<Void>, t: Throwable) {
+                    android.util.Log.e("DEBUG_VOTE", "Vote failure: ${t.message}", t)
+                    Toast.makeText(context, "Koneksi gagal: ${t.message}", Toast.LENGTH_SHORT).show()
+                    btnVote.isEnabled = true
+                }
+            })
     }
 }

@@ -34,13 +34,19 @@ class CandidateAdapter(
         holder.tvDept.text = candidate.division
 
         Glide.with(holder.itemView.context)
-            .load("http://10.0.2.2:5000/images/" + candidate.photo)
+            .load(com.example.esemkavote.api.ApiHost.imageBaseUrl + candidate.photo)
             .placeholder(R.drawable.ic_launcher_background)
             .into(holder.ivFoto)
 
         holder.itemView.setOnClickListener {
             onClick(candidate)
         }
+
+        holder.itemView.setOnClickListener {
+            android.util.Log.d("DEBUG_VOTE", "Click candidate id=${candidate.voting_candidate_id} name=${candidate.name}")
+            onClick(candidate)
+        }
+
     }
 
     override fun getItemCount(): Int = candidates.size

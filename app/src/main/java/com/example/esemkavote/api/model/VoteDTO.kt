@@ -1,5 +1,8 @@
 package com.example.esemkavote.api.model
 
+import com.google.gson.annotations.SerializedName
+
 data class VoteDTO(
-    val candidate_id: Int
+    @SerializedName("votingCandidateId")
+    val votingCandidateId: Int
 )

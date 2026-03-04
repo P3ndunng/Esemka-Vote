@@ -43,49 +43,46 @@ class FragmentHome : Fragment() {
     }
 
     private fun getVotingEvents() {
-        val sharedPref = requireActivity()
-            .getSharedPreferences("EsemkaPrefs", Context.MODE_PRIVATE)
+        val prefs = requireActivity().getSharedPreferences("EsemkaPrefs", Context.MODE_PRIVATE)
+        val empId = prefs.getInt("EMP_ID", 0)
 
-        val empIdStr = sharedPref.getString("EMP_ID", "1") ?: "1"
-        val empId    = empIdStr.toIntOrNull() ?: 1
+        android.util.Log.d("DEBUG_VOTE", "getEventDetail empID=$empId")
 
-        android.util.Log.d("DEBUG_VOTE", "Memanggil getEventDetail dengan empID=$empId")
+        if (empId == 0) {
+            tvEmpty.visibility = View.VISIBLE
+            rvEvent.visibility = View.GONE
+            tvEmpty.text = "Sesi login tidak valid. Silakan login ulang."
+            return
+        }
 
         ApiClient.instance.getEventDetail(empId).enqueue(object : Callback<List<VotingEvent>> {
-
-            override fun onResponse(
-                call: Call<List<VotingEvent>>,
-                response: Response<List<VotingEvent>>
-            ) {
-                android.util.Log.d("DEBUG_VOTE", "HTTP Code: ${response.code()}")
-                android.util.Log.d("DEBUG_VOTE", "URL: ${response.raw().request.url}")
+            override fun onResponse(call: Call<List<VotingEvent>>, response: Response<List<VotingEvent>>) {
+                android.util.Log.d("DEBUG_VOTE", "HTTP ${response.code()} URL=${response.raw().request.url}")
 
                 if (response.isSuccessful) {
-                    val events = response.body()
-                    android.util.Log.d("DEBUG_VOTE", "Jumlah events: ${events?.size}")
+                    val events = response.body().orEmpty()
+                    android.util.Log.d("DEBUG_VOTE", "events.size=${events.size}")
 
-                    if (events.isNullOrEmpty()) {
-                        // Data kosong - coba dengan empID berbeda untuk debug
-                        android.util.Log.w("DEBUG_VOTE", "List kosong untuk empID=$empId")
+                    if (events.isEmpty()) {
                         tvEmpty.visibility = View.VISIBLE
                         rvEvent.visibility = View.GONE
                         tvEmpty.text = "Tidak ada voting aktif.\n(empID=$empId)"
                     } else {
                         tvEmpty.visibility = View.GONE
                         rvEvent.visibility = View.VISIBLE
-                        rvEvent.adapter = VotingEventAdapter(events) { selectedEvent ->
-                            (activity as? HomeActivity)?.goToVoting(selectedEvent.voting_event_id)
+                        rvEvent.adapter = VotingEventAdapter(events) { selected ->
+                            (activity as? HomeActivity)?.goToVoting(selected.votingEventId)
                         }
                     }
                 } else {
-                    val errorBody = response.errorBody()?.string() ?: "Unknown"
-                    android.util.Log.e("DEBUG_VOTE", "Error ${response.code()}: $errorBody")
-                    Toast.makeText(context, "Gagal: ${response.code()} - $errorBody", Toast.LENGTH_LONG).show()
+                    val err = response.errorBody()?.string()
+                    android.util.Log.e("DEBUG_VOTE", "errorBody=$err")
+                    Toast.makeText(context, "Gagal: ${response.code()}", Toast.LENGTH_LONG).show()
                 }
             }
 
             override fun onFailure(call: Call<List<VotingEvent>>, t: Throwable) {
-                android.util.Log.e("DEBUG_VOTE", "Failure: ${t.message}")
+                android.util.Log.e("DEBUG_VOTE", "failure=${t.message}", t)
                 Toast.makeText(context, "Koneksi gagal: ${t.message}", Toast.LENGTH_LONG).show()
             }
         })
