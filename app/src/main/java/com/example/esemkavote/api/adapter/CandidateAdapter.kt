@@ -39,14 +39,9 @@ class CandidateAdapter(
             .into(holder.ivFoto)
 
         holder.itemView.setOnClickListener {
-            onClick(candidate)
-        }
-
-        holder.itemView.setOnClickListener {
             android.util.Log.d("DEBUG_VOTE", "Click candidate id=${candidate.voting_candidate_id} name=${candidate.name}")
             onClick(candidate)
         }
-
     }
 
     override fun getItemCount(): Int = candidates.size

@@ -3,15 +3,8 @@ package com.example.esemkavote.api.model
 import com.google.gson.annotations.SerializedName
 
 data class Candidate(
-    @SerializedName("votingCandidateId")
-    val voting_candidate_id: Int,
-
-    @SerializedName("name")
-    val name: String,
-
-    @SerializedName("division")
-    val division: String,
-
-    @SerializedName("photo")
-    val photo: String
+    @SerializedName("votingCandidateId") val voting_candidate_id: Int,
+    @SerializedName("name") val name: String,
+    @SerializedName("division") val division: String,
+    @SerializedName("photo") val photo: String
 )
